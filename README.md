@@ -9,11 +9,17 @@ libadwaita Fedora'da hazır gelir). Diğer Bloody fareleriyle de büyük ölçü
 | Özellik | Nasıl |
 |---|---|
 | Polling aralığı 1 / 2 / 4 / 8 ms (1000–125 Hz) | Donanım (`0x0D` komutu) |
-| DPI, 5 kademeye kadar, DPI tuşuyla geçiş | Donanım + servis |
+| DPI, 5 kademeye kadar, DPI tuşuyla geçiş | Donanım |
+| DPI kilidi (DPI tuşunu devre dışı bırakır) | Donanım |
 | Işık seviyesi (kapalı / 1 / 2 / 3) | Donanım (`0x11`) |
 | Kaydırma tekerleği aç/kapa | Donanım (`0x16`) |
 | Tıklama tepki süresi (debounce), en kısa tıklama aralığı | Yazılım (evdev + uinput) |
-| Canlı Hz ölçer, CPS testi (drag click) | Arayüz |
+| Canlı Hz ölçer, sol + sağ tık CPS testi (drag click) | Arayüz |
+
+**DPI tuşu** (tekerleğin arkasındaki) farenin kendi içinde çalışır: bilgisayara
+olay göndermez, ayarladığın kademeler arasında doğrudan geçer. **DPI kilidi**
+açıkken fareye yalnızca etkin kademe yazılır, tuş bir şey değiştirmez — moonwalk
+gibi hareketlerde kazara basınca nişanın bozulmaz.
 
 DPI ve Hz farenin belleğinde **kalıcı değildir**; fare çıkarılıp takıldığında servis
 ayarları yeniden uygular.
@@ -42,6 +48,29 @@ menüsünde "Bloody T60" adıyla bulunur.
 
 Kaynaktan RPM derlemek için: `./packaging/build-rpm.sh` (çıktı `dist/` altında).
 
+### Flatpak (tüm dağıtımlar)
+
+[Releases](https://github.com/Shuraimr/bloodyt60/releases) sayfasından `bloodyt60.flatpak` dosyasını indir:
+
+```bash
+flatpak install --user ./bloodyt60.flatpak
+```
+
+Flatpak sistem dosyalarına dokunamaz, bu yüzden fare izinleri ve drag click
+istisnası için **bir kez** şunu çalıştır (arayüzdeki uyarıdaki "Komutu kopyala"
+düğmesi de aynı komutu verir), sonra oturumu kapatıp aç:
+
+```bash
+sudo sh "$(flatpak info --show-location io.github.bloodyt60)/files/share/bloodyt60/host/host-setup.sh"
+```
+
+Arka plan servisi arayüzdeki "Arka plan servisi" anahtarıyla açılır (oturum
+açılışında başlaması için masaüstü arka plan izni ister). Flatpak'in ayarları
+`~/.var/app/io.github.bloodyt60/config/bloodyt60/` altındadır.
+
+Kaynaktan derlemek için: `./packaging/flatpak/build.sh` (gerekenler:
+`flatpak install --user flathub org.flatpak.Builder org.gnome.Sdk//51`).
+
 ### Paketsiz (~/.local)
 
 ```bash
@@ -58,6 +87,9 @@ Kaldırmak için `./uninstall.sh`. RPM ile paketsiz kurulumu aynı anda kullanma
 bloodyt60 info                     # model, sensör, ışık
 bloodyt60 set --ms 1 --dpi 1600   # 1 ms polling (1000 Hz), 1600 DPI
 bloodyt60 set --debounce 8         # debounce 8 ms (0 = kapalı)
+bloodyt60 set --slot 2 --lock      # 2. kademede kilitle (DPI tuşu çalışmaz)
+bloodyt60 set --unlock             # DPI tuşu kademeler arasında geçsin
+bloodyt60 cps                      # sol/sağ ham tıklama hızı
 bloodyt60 measure                  # gerçek rapor hızını ölç (fareyi oynat)
 ```
 

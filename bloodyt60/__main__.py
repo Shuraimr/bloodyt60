@@ -56,6 +56,10 @@ def cmd_set(a) -> int:
         cfg.rate_hz = 1000 // a.ms
     if a.dpi:
         cfg.dpi_slots[cfg.active_slot] = a.dpi
+    if a.slot:
+        cfg.active_slot = min(max(1, a.slot), len(cfg.dpi_slots)) - 1
+    if a.lock is not None:
+        cfg.dpi_lock = a.lock
     if a.light is not None:
         cfg.backlight = a.light
     if a.debounce is not None:
@@ -118,6 +122,68 @@ def cmd_daemon(_a) -> int:
     return 0
 
 
+def cmd_cps(_a) -> int:
+    """Fareden gelen ham sol/sağ tıklamaları canlı sayar (oyunla karşılaştırmak için)."""
+    from .debounce import BTN_LEFT, BTN_RIGHT, EV_KEY, EVENT_FMT, EVENT_SIZE, find_meter_device
+
+    path = find_meter_device()
+    if not path:
+        print("Farenin olay cihazı bulunamadı")
+        return 1
+    fd = os.open(path, os.O_RDONLY | os.O_NONBLOCK)
+    log_dir = os.path.join(os.environ.get("XDG_CACHE_HOME", os.path.expanduser("~/.cache")), "bloodyt60")
+    os.makedirs(log_dir, exist_ok=True)
+    log = open(os.path.join(log_dir, "cps.log"), "w")
+
+    class St:
+        def __init__(self):
+            self.times: list[float] = []
+            self.peak = 0
+            self.min_up = None  # bırakma -> yeniden basma
+
+    stats = {BTN_LEFT: St(), BTN_RIGHT: St()}
+    last_up: dict[int, float] = {}
+    buf = b""
+    print("Ham tık sayacı: SOL ve SAĞ (Ctrl+C ile çık). 'ara' = bırakıp yeniden basma süresi\n")
+    try:
+        while True:
+            r, _, _ = select.select([fd], [], [], 0.2)
+            if r:
+                buf += os.read(fd, EVENT_SIZE * 128)
+                while len(buf) >= EVENT_SIZE:
+                    s, us, typ, code, val = struct.unpack(EVENT_FMT, buf[:EVENT_SIZE])
+                    buf = buf[EVENT_SIZE:]
+                    if typ != EV_KEY or code not in stats or val not in (0, 1):
+                        continue
+                    t = s + us / 1e6
+                    log.write(f"{t:.6f} {code:#x} {val}\n")
+                    st = stats[code]
+                    if val == 1:
+                        lu = last_up.get(code)
+                        if lu is not None and t - lu < 0.5:
+                            st.min_up = t - lu if st.min_up is None else min(st.min_up, t - lu)
+                        st.times.append(t)
+                    else:
+                        last_up[code] = t
+                log.flush()
+            now = time.time()
+            parts = []
+            for name, code in (("SOL", BTN_LEFT), ("SAĞ", BTN_RIGHT)):
+                st = stats[code]
+                st.times = [t for t in st.times if t > now - 1.0]
+                st.peak = max(st.peak, len(st.times))
+                u = f"{st.min_up * 1000:4.1f}" if st.min_up else "  — "
+                parts.append(f"{name} {len(st.times):3d} CPS (max {st.peak:3d}, ara {u} ms)")
+            sys.stdout.write("\r" + " | ".join(parts) + " ")
+            sys.stdout.flush()
+    except KeyboardInterrupt:
+        print()
+        return 0
+    finally:
+        os.close(fd)
+        log.close()
+
+
 def cmd_gui(_a) -> int:
     from .gui import main
 
@@ -135,14 +201,18 @@ def main(argv=None) -> int:
     sp.add_argument("--hz", type=int, choices=[125, 250, 500, 1000])
     sp.add_argument("--ms", type=int, choices=[1, 2, 4, 8], help="polling aralığı (1 ms = 1000 Hz)")
     sp.add_argument("--dpi", type=int)
+    sp.add_argument("--slot", type=int, help="etkin DPI kademesi (1'den başlar)")
+    sp.add_argument("--lock", dest="lock", action="store_true", default=None, help="DPI tuşunu kilitle")
+    sp.add_argument("--unlock", dest="lock", action="store_false", help="DPI tuşu kademeler arasında geçsin")
     sp.add_argument("--light", type=int, choices=[0, 1, 2, 3])
     sp.add_argument("--debounce", type=int, help="ms, 0 = kapalı")
+    sub.add_parser("cps", help="ham tıklama hızını canlı göster")
     mp = sub.add_parser("measure")
     mp.add_argument("--seconds", type=float, default=4.0)
     a = p.parse_args(argv)
     handlers = {
         "info": cmd_info, "apply": cmd_apply, "set": cmd_set, "measure": cmd_measure,
-        "daemon": cmd_daemon, "gui": cmd_gui, None: cmd_gui,
+        "daemon": cmd_daemon, "gui": cmd_gui, "cps": cmd_cps, None: cmd_gui,
     }
     from .protocol import MouseError
 

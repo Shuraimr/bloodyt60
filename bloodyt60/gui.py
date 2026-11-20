@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import os
 import struct
-import subprocess
 import sys
 import time
 from collections import deque
@@ -13,16 +12,15 @@ import gi
 
 gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
-from gi.repository import Adw, Gdk, GLib, Gtk  # noqa: E402
+from gi.repository import Adw, Gdk, Gio, GLib, Gtk  # noqa: E402
 
-from . import sensor  # noqa: E402
+from . import sensor, service  # noqa: E402
 from .apply import apply_config, mouse_sensor  # noqa: E402
 from .config import Config  # noqa: E402
-from .debounce import BTN_LEFT, EV_KEY, EV_REL, EV_SYN, EVENT_FMT, EVENT_SIZE, find_meter_device  # noqa: E402
+from .debounce import BTN_LEFT, BTN_RIGHT, EV_KEY, EV_REL, EV_SYN, EVENT_FMT, EVENT_SIZE, find_meter_device  # noqa: E402
 from .protocol import BloodyMouse, MouseError, find_devices  # noqa: E402
 
 APP_ID = "io.github.bloodyt60"
-SERVICE = "bloodyt60.service"
 MAX_SLOTS = 5
 
 CSS = """
@@ -145,9 +143,55 @@ class HzMeter:
         return GLib.SOURCE_CONTINUE
 
 
+def _rate(times) -> int:
+    if not times:
+        return 0
+    now = time.time()
+    if now - times[-1] > 1.0:
+        return 0
+    return sum(1 for t in times if t > now - 1.0)
+
+
+class _ButtonStats:
+    """CPS testi için tek bir fare tuşunun istatistikleri."""
+
+    def __init__(self, gdk_button: int):
+        self.gdk_button = gdk_button
+        self.raw: deque[float] = deque(maxlen=4000)
+        self.app: deque[float] = deque(maxlen=4000)
+        self.best = 0
+        self.min_gap: float | None = None
+        self.now = self.peak = self.min = self.reach = None  # Gtk.Label
+
+    def reset(self) -> None:
+        self.raw.clear()
+        self.app.clear()
+        self.best = 0
+        self.min_gap = None
+
+    def add_raw(self, t: float) -> None:
+        if self.raw:
+            gap = t - self.raw[-1]
+            if gap > 2.0:  # uzun ara: yeni seri
+                self.raw.clear()
+                self.app.clear()
+            elif self.min_gap is None or gap < self.min_gap:
+                self.min_gap = gap
+        self.raw.append(t)
+
+    def render(self) -> None:
+        cur = _rate(self.raw)
+        self.best = max(self.best, cur)
+        self.now.set_label(str(cur))
+        self.peak.set_label(str(self.best))
+        self.min.set_label(f"{self.min_gap * 1000:.1f} ms" if self.min_gap else "—")
+        n = len(self.raw)
+        self.reach.set_label(f"%{min(100, len(self.app) * 100 // n)}" if n else "—")
+
+
 class Window(Adw.ApplicationWindow):
     def __init__(self, app):
-        super().__init__(application=app, title="Bloody T60")
+        super().__init__(application=app, title="Bloody T60" + (" (X11 test)" if os.environ.get("GDK_BACKEND") == "x11" else ""))
         self.set_default_size(560, 860)
         self.cfg = Config.load()
         self.mouse: BloodyMouse | None = None
@@ -162,6 +206,12 @@ class Window(Adw.ApplicationWindow):
         reapply.connect("clicked", lambda *_: self.apply_now(toast=True))
         header.pack_start(reapply)
         view.add_top_bar(header)
+        self.setup_banner = Adw.Banner(
+            title="Fareye erişim izni yok: sistem kurulumu gerekli (bir kez)",
+            button_label="Komutu kopyala",
+        )
+        self.setup_banner.connect("button-clicked", self._copy_setup_command)
+        view.add_top_bar(self.setup_banner)
 
         page = Adw.PreferencesPage()
         page.add(self._build_hero())
@@ -260,9 +310,16 @@ class Window(Adw.ApplicationWindow):
     def _build_dpi(self) -> Adw.PreferencesGroup:
         self.dpi_group = Adw.PreferencesGroup(
             title="DPI kademeleri",
-            description="Farenin DPI tuşu kademeler arasında dolaşır (servis çalışırken). "
+            description="Tekerleğin arkasındaki DPI tuşu bu kademeler arasında geçer. "
             "Yıldızlı kademe etkin olandır.",
         )
+        self.lock_row = Adw.SwitchRow(
+            title="DPI kilidi",
+            subtitle="DPI tuşu devre dışı; yalnızca etkin kademe kullanılır (moonwalk vb. için)",
+            active=self.cfg.dpi_lock,
+        )
+        self.lock_row.connect("notify::active", self._on_dpi_lock)
+        self.dpi_group.add(self.lock_row)
         add = Gtk.Button(icon_name="list-add-symbolic", valign=Gtk.Align.CENTER, tooltip_text="Kademe ekle")
         add.add_css_class("flat")
         add.connect("clicked", self._on_add_slot)
@@ -305,23 +362,28 @@ class Window(Adw.ApplicationWindow):
     def _build_cps(self) -> Adw.PreferencesGroup:
         g = Adw.PreferencesGroup(
             title="CPS testi",
-            description="İmleç alanın içindeyken sol tıkla (drag click dahil). Zamanlar "
-            "çekirdekten alınır; 'en kısa aralık' farenin firmware debounce sınırını gösterir.",
+            description="İmleç alanın içindeyken sol veya sağ tıkla (drag/butterfly dahil). "
+            "Ham değerler çekirdekten, 'ulaşan' değerler masaüstünden geçip uygulamaya gelenlerdir.",
         )
         reset = Gtk.Button(icon_name="edit-clear-symbolic", valign=Gtk.Align.CENTER, tooltip_text="Sıfırla")
         reset.add_css_class("flat")
         reset.connect("clicked", lambda *_: self._cps_reset())
         g.set_header_suffix(reset)
 
-        area = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6, height_request=170)
+        area = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6, height_request=230)
         area.add_css_class("cps-area")
         area.set_cursor(Gdk.Cursor.new_from_name("crosshair"))
-        row = Gtk.Box(homogeneous=True, vexpand=True, valign=Gtk.Align.CENTER)
-        self.cps_now = self._stat(row, "CPS")
-        self.cps_peak = self._stat(row, "EN YÜKSEK")
-        self.cps_min = self._stat(row, "EN KISA ARALIK")
-        self.cps_total = self._stat(row, "TOPLAM")
-        area.append(row)
+        self.cps_stats: dict[int, _ButtonStats] = {}
+        for code, gdk_button, title in ((BTN_LEFT, 1, "SOL TIK"), (BTN_RIGHT, 3, "SAĞ TIK")):
+            area.append(self._section_label(title))
+            row = Gtk.Box(homogeneous=True)
+            st = _ButtonStats(gdk_button)
+            st.now = self._stat(row, "CPS")
+            st.peak = self._stat(row, "EN YÜKSEK")
+            st.min = self._stat(row, "EN KISA ARALIK")
+            st.reach = self._stat(row, "ULAŞAN")
+            area.append(row)
+            self.cps_stats[code] = st
         self.cps_hint = Gtk.Label(label="Buraya tıklayarak başla")
         self.cps_hint.add_css_class("dim-label")
         self.cps_hint.add_css_class("caption")
@@ -332,13 +394,15 @@ class Window(Adw.ApplicationWindow):
         motion.connect("enter", lambda *_: setattr(self, "cps_inside", True))
         motion.connect("leave", lambda *_: setattr(self, "cps_inside", False))
         area.add_controller(motion)
-        # Alan içi tıklamalar pencerenin geri kalanına yayılmasın
+        # Masaüstü üzerinden gelen düğme olayları (oyunların gördüğü yol)
+        legacy = Gtk.EventControllerLegacy()
+        legacy.connect("event", self._on_app_event)
+        area.add_controller(legacy)
+        # Sağ tıkta bağlam menüsü vb. açılmasın
         click = Gtk.GestureClick(button=0)
+        click.connect("pressed", lambda gest, *_: gest.set_state(Gtk.EventSequenceState.CLAIMED))
         area.add_controller(click)
         self.cps_inside = False
-        self.cps_times: deque[float] = deque(maxlen=4000)
-        self.cps_best = 0
-        self.cps_min_gap: float | None = None
         GLib.timeout_add(100, self._cps_tick)
         g.add(area)
         return g
@@ -354,39 +418,35 @@ class Window(Adw.ApplicationWindow):
         parent.append(box)
         return val
 
+    @staticmethod
+    def _section_label(text: str) -> Gtk.Label:
+        lbl = Gtk.Label(label=text, margin_top=10)
+        lbl.add_css_class("cps-caption")
+        return lbl
+
     def _cps_reset(self) -> None:
-        self.cps_times.clear()
-        self.cps_best = 0
-        self.cps_min_gap = None
+        for st in self.cps_stats.values():
+            st.reset()
         self._cps_render()
 
     def _on_raw_click(self, t: float, code: int) -> None:
-        if code != BTN_LEFT or not self.cps_inside:
+        st = self.cps_stats.get(code)
+        if st is None or not self.cps_inside:
             return
-        if self.cps_times:
-            gap = t - self.cps_times[-1]
-            if gap > 2.0:  # uzun ara: yeni seri
-                self.cps_times.clear()
-            elif self.cps_min_gap is None or gap < self.cps_min_gap:
-                self.cps_min_gap = gap
-        self.cps_times.append(t)
+        st.add_raw(t)
         self._cps_render()
 
-    def _cps_current(self) -> int:
-        if not self.cps_times:
-            return 0
-        now = time.time()
-        if now - self.cps_times[-1] > 1.0:
-            return 0
-        return sum(1 for t in self.cps_times if t > now - 1.0)
+    def _on_app_event(self, _ctrl, event) -> bool:
+        if event.get_event_type() == Gdk.EventType.BUTTON_PRESS:
+            for st in self.cps_stats.values():
+                if st.gdk_button == event.get_button():
+                    st.app.append(time.time())
+            self._cps_render()
+        return False
 
     def _cps_render(self) -> None:
-        cur = self._cps_current()
-        self.cps_best = max(self.cps_best, cur)
-        self.cps_now.set_label(str(cur))
-        self.cps_peak.set_label(str(self.cps_best))
-        self.cps_min.set_label(f"{self.cps_min_gap * 1000:.1f} ms" if self.cps_min_gap else "—")
-        self.cps_total.set_label(str(len(self.cps_times)))
+        for st in self.cps_stats.values():
+            st.render()
         if self.cfg.debounce_enabled and self.cfg.debounce_ms > 0:
             self.cps_hint.set_label(
                 f"Debounce açık ({self.cfg.debounce_ms} ms): drag click sınırlanır, kapatman önerilir"
@@ -394,7 +454,7 @@ class Window(Adw.ApplicationWindow):
         elif self.mouse is None or self.meter.fd < 0:
             self.cps_hint.set_label("Fare olay cihazı okunamıyor")
         else:
-            self.cps_hint.set_label("Buraya tıklayarak test et")
+            self.cps_hint.set_label("Buraya sol veya sağ tıklayarak test et")
 
     def _cps_tick(self):
         self._cps_render()
@@ -491,8 +551,12 @@ class Window(Adw.ApplicationWindow):
                 self._rebuild_slots()
             except MouseError as e:
                 self.mouse = None
-                self.toast(str(e))
+                if "izin" in str(e):
+                    self.setup_banner.set_revealed(True)
+                else:
+                    self.toast(str(e))
         if self.mouse:
+            self.setup_banner.set_revealed(False)
             self.model_label.set_label(self.mouse.info.name.upper())
             sens = f"{self.info.label} · en fazla {self.info.max_cpi} DPI" if self.info else "Sensör bilinmiyor"
             self.sub_label.set_label(sens)
@@ -564,6 +628,12 @@ class Window(Adw.ApplicationWindow):
         v = int(round(adj.get_value() / 50) * 50)
         self.cfg.dpi_slots[i] = v
         self.changed(hardware=i == self.cfg.active_slot)
+
+    def _on_dpi_lock(self, row, _p):
+        if self._loading:
+            return
+        self.cfg.dpi_lock = row.get_active()
+        self.changed()
 
     def _on_slot_select(self, check, i):
         if not check.get_active() or self._loading:
@@ -643,34 +713,34 @@ class Window(Adw.ApplicationWindow):
 
     # --- servis ----------------------------------------------------------
 
-    def _systemctl(self, *args) -> subprocess.CompletedProcess:
-        return subprocess.run(["systemctl", "--user", *args, SERVICE], capture_output=True, text=True)
-
     def _service_active(self) -> bool:
-        return self._systemctl("is-active").stdout.strip() == "active"
+        return service.daemon_running()
 
     def _refresh_service(self) -> None:
-        enabled = self._systemctl("is-enabled").stdout.strip() == "enabled"
-        active = self._service_active()
-        installed = self._systemctl("cat").returncode == 0
+        st = service.status()
         self._loading = True
-        self.service_row.set_active(enabled)
+        self.service_row.set_active(st.enabled)
         self._loading = False
-        self.service_row.set_sensitive(installed)
-        if not installed:
-            self.service_row.set_subtitle("Kurulu değil — install.sh çalıştır")
+        self.service_row.set_sensitive(st.installed)
+        if not st.installed:
+            self.service_row.set_subtitle(st.note)
         else:
-            self.service_row.set_subtitle("Çalışıyor" if active else "Durdu")
+            self.service_row.set_subtitle("Çalışıyor" if st.active else "Durdu")
 
     def _on_service(self, row, _p):
         if self._loading:
             return
-        r = self._systemctl("enable" if row.get_active() else "disable", "--now")
-        if r.returncode != 0:
-            self.toast(r.stderr.strip() or "systemctl hatası")
-        self._refresh_service()
+        err = service.set_enabled(row.get_active())
+        if err:
+            self.toast(err)
+        GLib.timeout_add(600, lambda: self._refresh_service() or False)
 
     # --- yardımcılar -----------------------------------------------------
+
+    def _copy_setup_command(self, _banner) -> None:
+        cmd = service.host_setup_command()
+        self.get_clipboard().set(cmd)
+        self.toast("Komut kopyalandı: terminale yapıştırıp çalıştır, sonra oturumu yeniden aç")
 
     def toast(self, text: str) -> None:
         self.toasts.add_toast(Adw.Toast(title=GLib.markup_escape_text(text), timeout=3))
@@ -684,7 +754,8 @@ class Window(Adw.ApplicationWindow):
 
 class App(Adw.Application):
     def __init__(self):
-        super().__init__(application_id=APP_ID)
+        flags = Gio.ApplicationFlags.NON_UNIQUE if os.environ.get("BLOODYT60_NONUNIQUE") else Gio.ApplicationFlags.DEFAULT_FLAGS
+        super().__init__(application_id=APP_ID, flags=flags)
         self.connect("activate", self._activate)
 
     def _activate(self, app):

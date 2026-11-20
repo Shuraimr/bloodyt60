@@ -17,6 +17,7 @@ class Config:
     rate_hz: int = 1000
     dpi_slots: list[int] = field(default_factory=lambda: [800, 1600, 2400, 3200])
     active_slot: int = 0
+    dpi_lock: bool = False
     backlight: int = 3
     wheel_enabled: bool = True
     debounce_enabled: bool = False

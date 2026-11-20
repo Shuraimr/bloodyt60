@@ -1,5 +1,5 @@
 Name:           bloodyt60
-Version:        1.0.1
+Version:        1.1.0
 Release:        1%{?dist}
 Summary:        A4Tech Bloody T60 fare sürücüsü ve ayar arayüzü
 License:        GPL-3.0-or-later
@@ -34,6 +34,8 @@ install -Dm644 data/70-bloodyt60.rules %{buildroot}%{_udevrulesdir}/70-bloodyt60
 install -Dm644 data/50-bloodyt60.quirks %{buildroot}%{_datadir}/libinput/50-bloodyt60.quirks
 install -Dm644 data/bloodyt60.service %{buildroot}%{_userunitdir}/bloodyt60.service
 install -Dm644 data/io.github.bloodyt60.desktop %{buildroot}%{_datadir}/applications/io.github.bloodyt60.desktop
+install -Dm644 data/io.github.bloodyt60.svg %{buildroot}%{_datadir}/icons/hicolor/scalable/apps/io.github.bloodyt60.svg
+install -Dm644 data/io.github.bloodyt60.metainfo.xml %{buildroot}%{_metainfodir}/io.github.bloodyt60.metainfo.xml
 
 %post
 %udev_rules_update
@@ -55,8 +57,15 @@ udevadm trigger --subsystem-match=hidraw --subsystem-match=input --subsystem-mat
 %{_datadir}/libinput/50-bloodyt60.quirks
 %{_userunitdir}/bloodyt60.service
 %{_datadir}/applications/io.github.bloodyt60.desktop
+%{_datadir}/icons/hicolor/scalable/apps/io.github.bloodyt60.svg
+%{_metainfodir}/io.github.bloodyt60.metainfo.xml
 
 %changelog
+* Fri Nov 20 2026 Shuraimr <231307236+Shuraimr@users.noreply.github.com> - 1.1.0-1
+- DPI kilidi; DPI tuşu tüm kademeler arasında geçer
+- CPS testinde sağ tık
+- Flatpak paketi, uygulama simgesi ve metainfo
+
 * Fri Nov 20 2026 Shuraimr <231307236+Shuraimr@users.noreply.github.com> - 1.0.1-1
 - libinput debounce'u A4Tech fareleri için kapatıldı (drag click düzeltmesi)
 

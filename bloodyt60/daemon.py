@@ -123,6 +123,12 @@ class Daemon:
             self.apply()
 
     def run(self) -> None:
+        from .service import acquire_daemon_lock
+
+        self._lock = acquire_daemon_lock()
+        if self._lock is None:
+            log.info("bloodyt60 servisi zaten çalışıyor, çıkılıyor")
+            return
         log.info("bloodyt60 servisi başladı")
         while True:
             if self.mouse is None:

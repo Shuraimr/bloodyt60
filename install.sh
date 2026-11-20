@@ -14,6 +14,7 @@ EOS
 chmod +x "$HOME/.local/bin/bloodyt60"
 sed "s|^ExecStart=.*|ExecStart=$HOME/.local/bin/bloodyt60 daemon|" data/bloodyt60.service > "$HOME/.config/systemd/user/bloodyt60.service"
 install -m644 data/io.github.bloodyt60.desktop "$HOME/.local/share/applications/io.github.bloodyt60.desktop"
+install -Dm644 data/io.github.bloodyt60.svg "$HOME/.local/share/icons/hicolor/scalable/apps/io.github.bloodyt60.svg"
 systemctl --user daemon-reload
 systemctl --user enable --now bloodyt60.service
 systemctl --user restart bloodyt60.service

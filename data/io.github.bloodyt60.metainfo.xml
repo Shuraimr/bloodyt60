@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>io.github.bloodyt60</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>GPL-3.0-or-later</project_license>
+  <name>Bloody T60</name>
+  <summary>A4Tech Bloody T60 fare ayarları</summary>
+  <description>
+    <p>Bloody T60 için polling aralığı (1 ms'ye kadar), DPI kademeleri, ışık, tekerlek,
+    yazılımsal debounce, canlı Hz ölçer ve sol/sağ tık CPS testi.</p>
+  </description>
+  <launchable type="desktop-id">io.github.bloodyt60.desktop</launchable>
+  <url type="homepage">https://github.com/Shuraimr/bloodyt60</url>
+  <developer id="io.github.shuraimr"><name>Shuraimr</name></developer>
+  <content_rating type="oars-1.1"/>
+  <releases>
+    <release version="1.1.0" date="2026-11-20"/>
+  </releases>
+</component>

@@ -1,0 +1,33 @@
+app-id: io.github.bloodyt60
+runtime: org.gnome.Platform
+runtime-version: '51'
+sdk: org.gnome.Sdk
+command: bloodyt60
+finish-args:
+  - --socket=wayland
+  - --socket=fallback-x11
+  - --share=ipc
+  # hidraw (fare ayarları), input + uinput (debounce, Hz/CPS ölçümü)
+  - --device=all
+modules:
+  - name: bloodyt60
+    buildsystem: simple
+    build-commands:
+      - install -d /app/share/bloodyt60
+      - cp -r bloodyt60 /app/share/bloodyt60/
+      - find /app/share/bloodyt60 -name __pycache__ -prune -exec rm -rf {} +
+      - install -Dm755 bin/bloodyt60 /app/bin/bloodyt60
+      - install -Dm644 data/io.github.bloodyt60.desktop /app/share/applications/io.github.bloodyt60.desktop
+      - install -Dm644 data/io.github.bloodyt60.metainfo.xml /app/share/metainfo/io.github.bloodyt60.metainfo.xml
+      - install -Dm644 data/io.github.bloodyt60.svg /app/share/icons/hicolor/scalable/apps/io.github.bloodyt60.svg
+      - install -Dm644 -t /app/share/bloodyt60/host data/70-bloodyt60.rules data/50-bloodyt60.quirks
+      - install -Dm755 packaging/flatpak/host-setup.sh /app/share/bloodyt60/host/host-setup.sh
+    sources:
+      - type: dir
+        path: ../..
+        skip:
+          - dist
+          - rpmbuild
+          - .flatpak-builder
+          - build-flatpak
+          - repo

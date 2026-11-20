@@ -2,3 +2,6 @@ __pycache__/
 *.pyc
 dist/
 rpmbuild/
+.flatpak-builder/
+build-flatpak/
+repo/
