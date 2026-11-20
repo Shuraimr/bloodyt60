@@ -1,0 +1,6 @@
+# Bloody / A4Tech fareleri: yapılandırma arayüzüne (hidraw) ve debounce filtresi
+# için olay cihazına oturum açmış kullanıcının erişmesine izin ver.
+SUBSYSTEM=="hidraw", ATTRS{idVendor}=="09da", TAG+="uaccess"
+SUBSYSTEM=="input", KERNEL=="event*", ATTRS{idVendor}=="09da", TAG+="uaccess"
+# Yazılımsal debounce sanal fare oluşturmak için uinput kullanır.
+KERNEL=="uinput", SUBSYSTEM=="misc", TAG+="uaccess", OPTIONS+="static_node=uinput"

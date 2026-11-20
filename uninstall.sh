@@ -1,0 +1,7 @@
+#!/bin/sh
+systemctl --user disable --now bloodyt60.service 2>/dev/null
+rm -rf "$HOME/.local/share/bloodyt60" "$HOME/.local/bin/bloodyt60" \
+  "$HOME/.config/systemd/user/bloodyt60.service" \
+  "$HOME/.local/share/applications/io.github.bloodyt60.desktop"
+systemctl --user daemon-reload
+echo "Kaldırıldı. (udev kuralı: sudo rm /etc/udev/rules.d/70-bloodyt60.rules)"

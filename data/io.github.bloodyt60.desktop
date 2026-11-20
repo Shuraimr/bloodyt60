@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Bloody T60
+Comment=Bloody T60 fare ayarları (Hz, DPI, debounce, ışık)
+Exec=bloodyt60 gui
+Icon=input-mouse
+Terminal=false
+Categories=Settings;HardwareSettings;

@@ -1,0 +1,11 @@
+[Unit]
+Description=Bloody T60 fare ayarları ve debounce filtresi
+After=graphical-session.target
+
+[Service]
+ExecStart=/usr/bin/bloodyt60 daemon
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=default.target
