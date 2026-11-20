@@ -1,5 +1,5 @@
 Name:           bloodyt60
-Version:        0.1.0
+Version:        1.0.0
 Release:        1%{?dist}
 Summary:        A4Tech Bloody T60 fare sürücüsü ve ayar arayüzü
 License:        GPL-3.0-or-later
@@ -54,5 +54,5 @@ udevadm trigger --subsystem-match=hidraw --subsystem-match=input --subsystem-mat
 %{_datadir}/applications/io.github.bloodyt60.desktop
 
 %changelog
-* Fri Nov 20 2026 Shuraimr <231307236+Shuraimr@users.noreply.github.com> - 0.1.0-1
+* Fri Nov 20 2026 Shuraimr <231307236+Shuraimr@users.noreply.github.com> - 1.0.0-1
 - İlk sürüm
