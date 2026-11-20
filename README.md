@@ -18,6 +18,10 @@ libadwaita Fedora'da hazır gelir). Diğer Bloody fareleriyle de büyük ölçü
 DPI ve Hz farenin belleğinde **kalıcı değildir**; fare çıkarılıp takıldığında servis
 ayarları yeniden uygular.
 
+**Drag click:** libinput, titreşen tuşları kendi başına süzer ve bu drag click'i
+öldürür. Paket, A4Tech fareleri için libinput debounce'unu kapatan bir istisna kurar
+(`50-bloodyt60.quirks`). Kurduktan sonra **oturumu kapatıp yeniden aç**.
+
 **1 ms neden en düşük değer?** T60 bir USB 1.1 Full-Speed cihazıdır; bu sınıfta
 kesme uç noktası en sık 1 ms'de (bir USB frame'i) bir yoklanabilir. 1 ms = 1000 Hz
 farenin ve bağlantının fiziksel sınırıdır.

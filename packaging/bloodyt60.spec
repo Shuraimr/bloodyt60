@@ -1,5 +1,5 @@
 Name:           bloodyt60
-Version:        1.0.0
+Version:        1.0.1
 Release:        1%{?dist}
 Summary:        A4Tech Bloody T60 fare sürücüsü ve ayar arayüzü
 License:        GPL-3.0-or-later
@@ -13,6 +13,7 @@ Requires:       python3-gobject
 Requires:       gtk4
 Requires:       libadwaita
 Requires:       systemd-udev
+Requires:       libinput
 
 %description
 A4Tech Bloody T60 (ve benzeri Bloody) fareler için Linux yapılandırıcı:
@@ -30,6 +31,7 @@ install -d %{buildroot}%{_datadir}/bloodyt60
 cp -r bloodyt60 %{buildroot}%{_datadir}/bloodyt60/
 install -Dm755 bin/bloodyt60 %{buildroot}%{_bindir}/bloodyt60
 install -Dm644 data/70-bloodyt60.rules %{buildroot}%{_udevrulesdir}/70-bloodyt60.rules
+install -Dm644 data/50-bloodyt60.quirks %{buildroot}%{_datadir}/libinput/50-bloodyt60.quirks
 install -Dm644 data/bloodyt60.service %{buildroot}%{_userunitdir}/bloodyt60.service
 install -Dm644 data/io.github.bloodyt60.desktop %{buildroot}%{_datadir}/applications/io.github.bloodyt60.desktop
 
@@ -50,9 +52,13 @@ udevadm trigger --subsystem-match=hidraw --subsystem-match=input --subsystem-mat
 %{_bindir}/bloodyt60
 %{_datadir}/bloodyt60/
 %{_udevrulesdir}/70-bloodyt60.rules
+%{_datadir}/libinput/50-bloodyt60.quirks
 %{_userunitdir}/bloodyt60.service
 %{_datadir}/applications/io.github.bloodyt60.desktop
 
 %changelog
+* Fri Nov 20 2026 Shuraimr <231307236+Shuraimr@users.noreply.github.com> - 1.0.1-1
+- libinput debounce'u A4Tech fareleri için kapatıldı (drag click düzeltmesi)
+
 * Fri Nov 20 2026 Shuraimr <231307236+Shuraimr@users.noreply.github.com> - 1.0.0-1
 - İlk sürüm

@@ -1,0 +1,8 @@
+# libinput'un yazılımsal tuş debounce'unu A4Tech/Bloody fareleri için kapatır.
+# Aksi halde drag click / butterfly click gibi çok hızlı tıklamalar
+# "titreşim" sayılıp yutulur (Minecraft'ta CPS düşer).
+# ModelBouncingKeys=1, libinput'ta debounce'u devre dışı bırakır.
+[Bloody A4Tech mice]
+MatchUdevType=mouse
+MatchVendor=0x09DA
+ModelBouncingKeys=1
